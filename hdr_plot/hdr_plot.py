@@ -2,7 +2,7 @@
 # hdr-plot.py v0.2.3 - A simple HdrHistogram plotting script.
 # Copyright © 2018 Bruno Bonacci - Distributed under the Apache License v 2.0
 #
-# usage: hdr-plot.py [-h] [--output OUTPUT] [--title TITLE] [--nobox] files [files ...]
+# usage: hdr-plot.py [-h] [--output OUTPUT] [--title TITLE] [--legend_fontsize FONTSIZE] [--nobox] files [files ...]
 #
 # A standalone plotting script for https://github.com/giltene/wrk2 and
 #  https://github.com/HdrHistogram/HdrHistogram.
@@ -17,6 +17,9 @@ import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
+
+# global settings
+fontsize=20
 
 
 #
@@ -61,7 +64,7 @@ def plot_summarybox( ax, percentiles, labels ):
     info_box(ax, textstr)
 
 
-def plot_percentiles( percentiles, labels ):
+def plot_percentiles( percentiles, labels, legend_fontsize=fontsize):
     fig, ax = plt.subplots(figsize=(16,8))
     # plot values
     for data in percentiles:
@@ -69,17 +72,20 @@ def plot_percentiles( percentiles, labels ):
 
     # set axis and legend
     ax.grid()
-    ax.set(xlabel='Percentile',
-           ylabel='Latency (milliseconds)',
-           title='Latency Percentiles (lower is better)')
+    ax.set_xlabel('Percentile', fontsize=fontsize)
+    ax.set_ylabel('Latency (milliseconds)', fontsize=fontsize)
+    ax.set_title('Latency Percentiles (lower is better)', fontsize=fontsize)
+    plt.yticks(fontsize=fontsize)
     ax.set_xscale('logit')
-    plt.xticks([0.25, 0.5, 0.9, 0.99, 0.999, 0.9999, 0.99999, 0.999999])
-    majors = ["25%", "50%", "90%", "99%", "99.9%", "99.99%", "99.999%", "99.9999%"]
+    ax.get_xticklabels()[1].set_color("red")
+    plt.xticks([0.9, 0.99, 0.999, 0.9999], fontsize=fontsize)
+    # plt.xticks([0.25, 0.5, 0.9, 0.99, 0.999, 0.9999, 0.99999, 0.999999])
+    majors = ["90%", "99%", "99.9%", "99.99%", "99.999%", "99.9999%"]
+    # majors = ["25%", "50%", "90%", "99%", "99.9%", "99.99%", "99.999%", "99.9999%"]
+
     ax.xaxis.set_major_formatter(ticker.FixedFormatter(majors))
     ax.xaxis.set_minor_formatter(ticker.NullFormatter())
-    plt.legend(bbox_to_anchor=(0., 1.02, 1., .102),
-               loc=3, ncol=2,  borderaxespad=0.,
-               labels=labels)
+    plt.legend(labels, loc='upper left', fontsize=legend_fontsize)
 
     return fig, ax
 
@@ -92,6 +98,7 @@ def arg_parse():
     parser.add_argument('--title', default='', help='The plot title.')
     parser.add_argument("--nobox", help="Do not plot summary box",
                         action="store_true")
+    parser.add_argument("--legend_fontsize", default=20, help="Change the legend fontsize")
     args = parser.parse_args()
     return args
 
@@ -99,17 +106,23 @@ def arg_parse():
 def main():
     # print command line arguments
     args = arg_parse()
+    # print(args)
 
     # load the data and create the plot
     pct_data = parse_files(args.files)
     labels = [re.findall(filename, file)[0][1] for file in args.files]
+    legend_fontsize = int(args.legend_fontsize)
+
     # plotting data
-    fig, ax = plot_percentiles(pct_data, labels)
+    fig, ax = plot_percentiles(pct_data, labels, legend_fontsize)
+
     # plotting summary box
     if not args.nobox:
         plot_summarybox(ax, pct_data, labels)
+
     # add title
     plt.suptitle(args.title)
+    
     # save image
     plt.savefig(args.output)
     print( "Wrote: " + args.output)
