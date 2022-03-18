@@ -31,6 +31,11 @@ fontsize=20
 regex = re.compile(r'\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)\s+([0-9.]+)')
 filename = re.compile(r'(.*/)?([^.]*)(\.\w+\d+)?')
 
+regex_lines = re.compile(r'(.+((requests)|(99\.000%)).+)|(#)|(Req)')
+regex_val = re.compile(r'requests=([0-9]+)')
+regex_thr = re.compile(r'\s+([0-9]+)\s+requests')
+regex_lat = re.compile(r'.+(99\.000%)+\s+([0-9.\w]+)')
+
 def parse_percentiles( file ):
     lines       = [ line for line in open(file) if re.match(regex, line)]
     values      = [ re.findall(regex, line)[0] for line in lines]
@@ -42,10 +47,6 @@ def parse_percentiles( file ):
 def parse_files( files ):
     return [ parse_percentiles(file) for file in files]
 
-regex_lines = re.compile(r'(.+((requests)|(99\.000%)).+)')
-regex_val = re.compile(r'requests=([0-9]+)')
-regex_thr = re.compile(r'\s+([0-9]+)\s+requests')
-regex_lat = re.compile(r'.+(99\.000%)+\s+([0-9.\w]+)')
 
 def info_text(name, data):
     textstr = '%-18s\n------------------\n%-6s = %6.2f ms\n%-6s = %6.2f ms\n%-6s = %6.2f ms\n'%(
@@ -178,15 +179,10 @@ def plot_lat_req_all(tail_data, labels, legend_location,legend_fontsize=fontsize
     return fig, ax
     
 
-def plot_lat_req(tail_data, labels, legend_location,legend_fontsize=fontsize):
+def plot_lat_req(data, labels, legend_location,legend_fontsize=fontsize):
     # general setup
     fig, ax = plt.subplots(figsize=(16,8))
 
-
-    # create new relevant labels
-    data = pd.concat(tail_data)
-    data['filename'] = labels
-    data = data.sort_values(by='Requests').reset_index(drop=True)
 
     labels = data['Benchmark'].unique() 
     lines = ["-","--","-.",":"]
@@ -197,15 +193,15 @@ def plot_lat_req(tail_data, labels, legend_location,legend_fontsize=fontsize):
     if len(labels) == 1:
         print("one benchmark but multiple params")
         for benchmark in labels:
-            for mark, param in enumerate(['horizontal', 'vertical', 'availability','baseline']):
+            for mark, param in enumerate(['Horizontal', 'Vertical', 'Availability','Baseline']):
                 plot_data = data.loc[data['Benchmark'] == benchmark]
                 if len(plot_data[param].unique()) == 0:
                     continue
 
-                if param == 'availability':
+                if param == 'Availability':
                     plot_data = plot_data.loc[plot_data[param] == 1]
                     if plot_data[param].unique() == 1:
-                        ax.plot(plot_data['Requests'], plot_data['Latency'], label=f"{benchmark}-{orchestrator}-{param}", linestyle=lines[mark % len(markers)])
+                        ax.plot(plot_data['Requests'], plot_data['Latency'], label=f"{benchmark}-{orchestrator}-{param.lower}", linestyle=lines[mark % len(markers)])
                 else:
                     plot_data = plot_data.loc[plot_data[param] == 0]
                     if plot_data[param].unique() == 0:
@@ -216,7 +212,6 @@ def plot_lat_req(tail_data, labels, legend_location,legend_fontsize=fontsize):
         for mark, benchmark in enumerate(labels):
                 plot_data = data.loc[data['Benchmark'] == benchmark]
                 ax.plot(plot_data['Requests'], plot_data['Latency'], label=f"{benchmark}-{orchestrator}", linestyle=lines[mark % len(markers)])
-    # data = pd.concat(tail_data)
     # ax.plot(data['Requests'], data['Latency'])
 
     
@@ -249,11 +244,6 @@ def parse_files_tail(files):
     df = pd.concat([ parse_prelim(file) for file in files]).sort_values(by='Requests').reset_index(drop=True)
     return df
 
-regex_lines = re.compile(r'(.+((requests)|(99\.000%)).+)|(#)|(Req)')
-regex_val = re.compile(r'requests=([0-9]+)')
-regex_thr = re.compile(r'\s+([0-9]+)\s+requests')
-regex_lat = re.compile(r'.+(99\.000%)+\s+([0-9.\w]+)')
-# regex_mean = re.compile('(#\[(Mean\s+=\s+\w+.\w+))')
 
 def parse_prelim(file):
     # swarm-sn-wrk-mixed-c6525-25g-exp0-havail0-hori1-verti1-infi0-t4-c8-d30-R200
@@ -266,7 +256,9 @@ def parse_prelim(file):
         latency = float(latency[:-2])
     else:
         latency = float(latency[:-1]) * 1000
-    throughput  = float([ val for val in  [ re.findall(regex_thr, line) for line in lines ] if len(val) != 0 ][0][0])
+    total_throughput  = float([ val for val in  [ re.findall(regex_thr, line) for line in lines ] if len(val) != 0 ][0][0])
+    regex_thr_measured = ".+(Total count\s+=\s+)([0-9]+)"
+    measured_throughput  = [ re.search(regex_thr_measured, line) for line in lines if re.search(regex_thr_measured, line) ][0].group(2)
     regex_mean= "#\[Mean\s+=\s+(\w+.\w+)"
     mean  = float([ re.search(regex_mean, line) for line in lines if re.search(regex_mean, line) ][0].group(1))
     regex_max= "#\[Max\s+=\s+(\w+.\w+)"
@@ -278,7 +270,6 @@ def parse_prelim(file):
     # print(requests, latency, throughput, mean, max_val, stddev, reqsec)
 
     # params stated in the filename
-    # params = str(file).split('/')[-1].split('-')
     orchestrator =  re.search('(swarm|k8s|nomad)', file).group(1)
     benchmark = re.search('(sn|hr|mm)', file).group(1)
     infinite = int(re.search('(infi)(1|0)', file).group(2))
@@ -286,8 +277,8 @@ def parse_prelim(file):
     availability = int(re.search('(havail)(0|1)', file).group(2))
     horizontal = int(re.search('(hori)(1|0)', file).group(2))
     vertical = int(re.search('(verti)(1|0)', file).group(2))
-    threads = int(re.search('(t)([0-9]+)', file).group(2))
-    connections = int(re.search('(c([0-9]+))', file).group(2))
+    threads = int(re.search('(t)([0-9]{1,2})-c', file).group(2))
+    connections = int(re.search('c([0-9]{1,4})-d', file).group(1))
     duration = int(re.search('d([0-9]+)', file).group(1))
     if int(availability) == 0 and int(horizontal) == 1 and int(vertical) == 1: 
         baseline = 0
@@ -297,12 +288,11 @@ def parse_prelim(file):
     # print("orchestrator", "benchmark", "infinite", "exp", "availability", "horizontal", "vertical", "threads", "connections", "duration", "latency", "throughput", "mean", "max", "stddev", "reqsec", "baseline")
     
 
-
-
-    # df = pd.DataFrame(zip(latency, requests, throughput, benchmark, orchestrator),
+# df = pd.DataFrame(zip(latency, requests, throughput, benchmark, orchestrator),
     df = pd.DataFrame({'Latency': [latency],
         'Requests': [requests], 
-        'Throughput': [throughput],
+        'Throughput': [total_throughput],
+        'Measured_Throughput': [measured_throughput],
         'Baseline': [baseline],
         'Orchestrator': [orchestrator],
         'Benchmark': [benchmark],
@@ -319,8 +309,7 @@ def parse_prelim(file):
         'StdDev': [stddev],
         'ReqSec': [reqsec]}
     )  
-    print(df.head())
-
+    # print(df.head())
     return df
 
 
@@ -335,7 +324,7 @@ def arg_parse():
     parser.add_argument('--thr_req', help="Plot throughput vs requests", action="store_true")
     parser.add_argument('--lat_req_all', help="Plot latency vs requests all orchestrators baseline", action="store_true")
     parser.add_argument('--save', help="Save the dataframe", action="store_true")
-    parser.add_argument('--print', help="Print the head of the dataframe", action="store_true")
+    parser.add_argument('--head', help="Print the head of the dataframe", action="store_true")
     parser.add_argument('--legend_location', default="lower right", help="Change the legend location")
     parser.add_argument("--legend_fontsize", default=20, help="Change the legend fontsize")
     args = parser.parse_args()
@@ -345,28 +334,27 @@ def arg_parse():
 def main():
     # print command line arguments
     args = arg_parse()
-
-    # load the data and create the plot
-    # print(args.files)
-    # return 0
-    df = parse_files_tail(args.files)
-    tail_data = parse_files_tail(args.files)
-
-    pct_data = parse_files(args.files)
-    tail_data = parse_files_tail(args.files)
-
     labels = [re.findall(filename, file)[0][1] for file in args.files]
-    # print(labels)
     legend_fontsize = int(args.legend_fontsize)
     legend_location = args.legend_location
 
-    if args.print:
-        print(df.head())
-        return 0
+    # load the data and create the plot
+    # print(args.files)
+    pct_data = parse_files(args.files)
+    tail_data = parse_files_tail(args.files)
+
+
+    if args.head:
+        print(tail_data.head())
 
     if args.save:
-        name = df['Exp'].unique()[0]
-        save_df(df, f'df-{name}.csv')
+        name = tail_data['Exp'].unique()[0]
+        # print(name[-2:])
+        if name[-2:] == '12' or name[-2:] == '13' or name[-2:] == '14' or name[-2:] == '15':
+            orch = tail_data['Orchestrator'].unique()[0]
+            save_df(tail_data, f'df-{name}-{orch}.csv')
+        else:
+            save_df(tail_data, f'df-{name}.csv')
         return 0
 
     # plotting data
@@ -394,3 +382,5 @@ def main():
 # for testing
 if __name__ == "__main__":
     main()
+
+
