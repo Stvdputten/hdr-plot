@@ -20,7 +20,8 @@ setuptools.setup(
     ),
     install_requires=[
         'matplotlib',
-        'pandas'
+        'pandas',
+        'seaborn'
     ],
     scripts=['bin/hdr-plot'],
 
