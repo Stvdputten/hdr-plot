@@ -276,7 +276,7 @@ def parse_prelim(file):
     exp = re.search('(exp[0-9]+)', file).group(1)
     availability = int(re.search('(havail)(0|1)', file).group(2))
     horizontal = int(re.search('(hori)(1|0)', file).group(2))
-    N = int(re.search('(N)(.)', file).group(1))
+    N = int(re.search('(N)([0-9]{1,2})', file).group(2))
     vertical = int(re.search('(verti)(1|0)', file).group(2))
     threads = int(re.search('(t)([0-9]{1,2})-c', file).group(2))
     connections = int(re.search('c([0-9]{1,4})-d', file).group(1))
